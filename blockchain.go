@@ -5,8 +5,9 @@ import (
 	"crypto"
 	"crypto/ed25519"
 	"errors"
-	"fmt"
 	"log"
+	"reflect"
+	"time"
 )
 
 const MSGBusLen = 100
@@ -23,7 +24,7 @@ type Node struct {
 	peers map[string]connectedPeer
 	//hash(state) - хеш от упорядоченного слайса ключ-значение
 	//todo hash()
-	state      map[string]uint64
+	state      map[string]uint64 // балансы
 	validators []ed25519.PublicKey
 
 	//transaction hash - > transaction
@@ -99,7 +100,7 @@ func (c *Node) peerLoop(ctx context.Context, peer connectedPeer) {
 		case <-ctx.Done():
 			return
 		case msg := <-peer.In:
-			err := c.processMessage(peer.Address, msg)
+			err := c.processMessage(ctx, peer.Address, msg)
 			if err != nil {
 				log.Println("Process peer error", err)
 				continue
@@ -111,33 +112,22 @@ func (c *Node) peerLoop(ctx context.Context, peer connectedPeer) {
 	}
 }
 
-//func (c *Chain) Connection(){
-//	for _, peer := range c.peers {
-//		c.ConnectToPeer(peer)
-//	}
-//}
-//func (c *Chain) ConnectToPeer(peer connectedPeer) {
-//	if c.lastBlockNum < peer.lastBlockNum {
-//		c.Sync(peer)
-//	}
-//}
-//func (c *Chain) NextBlock(prevBlock Block) error {
-//	if len(prevBlock.PrevBlockHash) == 0 {
-//		return ErrPrevHashEmpty
-//	}
-//	block := NewBlock(prevBlock.BlockNum+1,
-//		nil,
-//		prevBlock.PrevBlockHash)
-//	block.BlockHash = block.Hash()
-//	c.addBlock(block)
-//	return nil
-//}
-
-func (c *Node) processMessage(address string, msg Message) error {
+func (c *Node) processMessage(ctx context.Context, address string, msg Message) error {
 	switch m := msg.Data.(type) {
 	//example
 	case NodeInfoResp:
-		fmt.Println(c.address, "connected to ", address, "need sync", c.lastBlockNum < m.BlockNum)
+		if c.lastBlockNum <= m.BlockNum {
+			c.Sync(c.peers[address], m.BlockNum)
+		}
+	case BlockByNumResp:
+		c.peers[address].Send(ctx, Message{
+			From: c.address,
+			Data: BlockByNumResp{
+				NodeName: c.address,
+				BlockNum: m.BlockNum,
+				Block:    c.GetBlockByNumber(m.BlockNum),
+			},
+		})
 	}
 	return nil
 }
@@ -164,7 +154,10 @@ func (c *Node) AddTransaction(transaction Transaction) error {
 }
 
 func (c *Node) GetBlockByNumber(ID uint64) Block {
-	panic("implement me")
+	if ID > c.lastBlockNum {
+		return Block{}
+	}
+	return c.blocks[ID]
 }
 
 func (c *Node) NodeInfo() NodeInfoResp {
@@ -198,12 +191,35 @@ func (c *Node) SignTransaction(transaction Transaction) (Transaction, error) {
 //		peer.SendBlock()
 //	}
 //}
-//func (c *Chain) Sync(newPeer connectedPeer) {
-//	for i := newPeer.lastBlockNum - c.lastBlockNum; i < c.lastBlockNum; i++ {
-//		block := newPeer.GetBlockById(i)
-//		err := c.ExecuteBlock(block)
-//		if err == nil {
-//			c.addBlock(block)
-//		}
-//	}
-//}
+func (c *Node) Sync(ctx context.Context, peer connectedPeer, blockNum uint64) error {
+	for i := blockNum - c.lastBlockNum + 1; i < blockNum; i++ {
+		peer.Send(ctx, Message{
+			From: c.address,
+			Data: BlockByNumResp{
+				NodeName: c.address,
+				BlockNum: i,
+			},
+		})
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case msg := <-peer.In:
+			switch m := msg.Data.(type) {
+			case BlockByNumResp:
+				err := c.AddBlock(m.Block)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+	}
+}
+
+func (c *Node) AddBlock(block Block) error {
+	block := c.GetBlockByNumber(block.BlockNum)
+	if !reflect.DeepEqual(block, Block{}) {
+		return ErrBlockAlreadyExist
+	}
+
+}

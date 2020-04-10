@@ -21,7 +21,6 @@ type Genesis struct {
 //}
 
 func (g Genesis) ToBlock() Block {
-
 	transactions := make([]Transaction, len(g.Alloc))
 
 	i := 0

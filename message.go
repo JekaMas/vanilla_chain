@@ -9,3 +9,9 @@ type NodeInfoResp struct {
 	NodeName string
 	BlockNum uint64
 }
+
+type BlockByNumResp struct {
+	NodeName string
+	BlockNum uint64
+	Block    Block
+}
