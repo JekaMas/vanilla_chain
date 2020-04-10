@@ -1,8 +1,7 @@
 package vanilla_chain
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"errors"
 	"time"
 )
 
@@ -10,10 +9,10 @@ type Block struct {
 	BlockNum      uint64
 	Timestamp     int64
 	Transactions  []Transaction
-	BlockHash     string
+	BlockHash     string `json:"-"`
 	PrevBlockHash string
 	StateHash     string
-	Signature     []byte
+	Signature     []byte `json:"-"`
 }
 
 func NewBlock(num uint64, transactions []Transaction, previousHash string) *Block {
@@ -25,14 +24,13 @@ func NewBlock(num uint64, transactions []Transaction, previousHash string) *Bloc
 	}
 }
 
-//impliment me hash(BlockNum, Timestamp, Transactions, PrevBlockHash)
-func (b *Block) Hash() string {
-	hash := sha256.New()
-
-	hash.Write([]byte(string(b.BlockNum) +
-		string(b.Timestamp) +
-		/* + transactions   +*/
-		b.PrevBlockHash))
-	hashed := hash.Sum(nil)
-	return hex.EncodeToString(hashed)
+func (bl *Block) Hash() (string, error) {
+	if bl == nil {
+		return "", errors.New("empty block")
+	}
+	b, err := Bytes(bl)
+	if err != nil {
+		return "", err
+	}
+	return Hash(b)
 }

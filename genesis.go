@@ -1,17 +1,46 @@
 package vanilla_chain
 
-import "crypto/ed25519"
+import (
+	"crypto"
+	"sort"
+)
 
+// first block with blockchain settings
 type Genesis struct {
 	//Account -> funds
 	Alloc map[string]uint64
 	//list of validators public keys
-	Validators []ed25519.PublicKey
+	Validators []crypto.PublicKey
 }
 
-func NewGenesis(allocs map[string]uint64, validators []ed25519.PublicKey) *Genesis {
-	return &Genesis{
-		Alloc:      allocs,
-		Validators: validators,
+//func NewGenesis(allocs map[string]uint64, validators []ed25519.PublicKey) *Genesis {
+//	return &Genesis{
+//		Alloc:      allocs,
+//		Validators: validators,
+//	}
+//}
+
+func (g Genesis) ToBlock() Block {
+
+	transactions := make([]Transaction, len(g.Alloc))
+
+	i := 0
+	for address, amount := range g.Alloc {
+		transactions[i] = *NewTransaction("", address, amount, 0, nil, nil)
+		i++
 	}
+	sort.Slice(transactions, func(i, j int) bool {
+		return transactions[i].To < transactions[j].To
+	})
+	prevHash, err := Hash([]byte("0"))
+	if err != nil {
+		return Block{}
+	}
+	block := NewBlock(0, transactions, prevHash)
+
+	block.BlockHash, err = block.Hash()
+	if err != nil {
+		return Block{}
+	}
+	return *block
 }
