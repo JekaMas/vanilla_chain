@@ -5,9 +5,9 @@ import (
 	"crypto"
 	"crypto/ed25519"
 	"errors"
+	"fmt"
 	"log"
 	"reflect"
-	"time"
 )
 
 const MSGBusLen = 100
@@ -116,18 +116,41 @@ func (c *Node) processMessage(ctx context.Context, address string, msg Message) 
 	switch m := msg.Data.(type) {
 	//example
 	case NodeInfoResp:
-		if c.lastBlockNum <= m.BlockNum {
-			c.Sync(c.peers[address], m.BlockNum)
+		fmt.Println(c.lastBlockNum, " and ", m.BlockNum)
+		if c.lastBlockNum < m.BlockNum {
+			c.peers[address].Send(ctx, Message{
+				From: c.address,
+				Data: BlockByNumResp{
+					NodeName: c.address,
+					BlockNum: m.BlockNum - c.lastBlockNum,
+				},
+			})
 		}
 	case BlockByNumResp:
-		c.peers[address].Send(ctx, Message{
-			From: c.address,
-			Data: BlockByNumResp{
-				NodeName: c.address,
-				BlockNum: m.BlockNum,
-				Block:    c.GetBlockByNumber(m.BlockNum),
-			},
-		})
+		if !reflect.DeepEqual(m.Block, Block{}) {
+			err := c.AddBlock(m.Block)
+			if err != nil {
+				return err
+			}
+			if c.lastBlockNum < m.BlockNum {
+				c.peers[address].Send(ctx, Message{
+					From: c.address,
+					Data: BlockByNumResp{
+						NodeName: c.address,
+						BlockNum: m.BlockNum - c.lastBlockNum,
+					},
+				})
+			}
+		} else {
+			c.peers[address].Send(ctx, Message{
+				From: c.address,
+				Data: BlockByNumResp{
+					NodeName: c.address,
+					BlockNum: m.BlockNum,
+					Block:    c.GetBlockByNumber(m.BlockNum),
+				},
+			})
+		}
 	}
 	return nil
 }
@@ -153,11 +176,11 @@ func (c *Node) AddTransaction(transaction Transaction) error {
 	panic("implement me")
 }
 
-func (c *Node) GetBlockByNumber(ID uint64) Block {
-	if ID > c.lastBlockNum {
+func (c *Node) GetBlockByNumber(id uint64) Block {
+	if id > c.lastBlockNum || len(c.blocks) == 0 {
 		return Block{}
 	}
-	return c.blocks[ID]
+	return c.blocks[id]
 }
 
 func (c *Node) NodeInfo() NodeInfoResp {
@@ -192,7 +215,8 @@ func (c *Node) SignTransaction(transaction Transaction) (Transaction, error) {
 //	}
 //}
 func (c *Node) Sync(ctx context.Context, peer connectedPeer, blockNum uint64) error {
-	for i := blockNum - c.lastBlockNum + 1; i < blockNum; i++ {
+	fmt.Println("Node "+c.address+" sync with ", peer.Address)
+	for i := blockNum - c.lastBlockNum; i <= blockNum; i++ {
 		peer.Send(ctx, Message{
 			From: c.address,
 			Data: BlockByNumResp{
@@ -200,26 +224,35 @@ func (c *Node) Sync(ctx context.Context, peer connectedPeer, blockNum uint64) er
 				BlockNum: i,
 			},
 		})
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case msg := <-peer.In:
-			switch m := msg.Data.(type) {
-			case BlockByNumResp:
-				err := c.AddBlock(m.Block)
-				if err != nil {
-					return err
+	NextBlock:
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case msg := <-peer.In:
+				switch m := msg.Data.(type) {
+				case BlockByNumResp:
+					err := c.AddBlock(m.Block)
+					if err != nil {
+						return err
+					}
+					break NextBlock
+				default:
 				}
 			}
 		}
-
 	}
+	return nil
 }
 
 func (c *Node) AddBlock(block Block) error {
-	block := c.GetBlockByNumber(block.BlockNum)
-	if !reflect.DeepEqual(block, Block{}) {
+	b := c.GetBlockByNumber(block.BlockNum)
+	if !reflect.DeepEqual(b, Block{}) {
 		return ErrBlockAlreadyExist
 	}
 
+	//todo check
+	c.blocks = append(c.blocks, block)
+	c.lastBlockNum = uint64(len(c.blocks)) - 1
+	return nil
 }

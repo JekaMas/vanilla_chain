@@ -8,6 +8,7 @@ type Blockchain interface {
 	Connection(address string, in chan Message) chan Message
 
 	PublicAPI
+	AddBlock(block Block) error
 }
 
 type PublicAPI interface {

@@ -3,6 +3,7 @@ package vanilla_chain
 import (
 	"crypto"
 	"crypto/ed25519"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -120,4 +121,59 @@ func TestHased(t *testing.T) {
 	}
 
 	t.Log(block.Hash())
+}
+
+func TestNode_Sync(t *testing.T) {
+	numOfPeers := 5
+	peers := make([]*Node, numOfPeers)
+
+	genesis := Genesis{
+		Alloc: make(map[string]uint64),
+	}
+	keys := make([]ed25519.PrivateKey, numOfPeers)
+	for i := range keys {
+		_, key, err := ed25519.GenerateKey(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys[i] = key
+
+		address, err := PubKeyToAddress(key.Public())
+		if err != nil {
+			t.Error(err)
+		}
+		genesis.Alloc[address] = 100
+	}
+	genesisBlock := genesis.ToBlock()
+	var err error
+	for i := 0; i < numOfPeers; i++ {
+		peers[i], err = NewNode(keys[i], genesis)
+		if err != nil {
+			t.Error(err)
+		}
+		peers[i].AddBlock(genesisBlock)
+	}
+	err = peers[3].AddBlock(*NewBlock(1, nil, peers[2].GetBlockByNumber(0).BlockHash))
+	if err != nil {
+		t.Error(err)
+	}
+	for i := 0; i < len(peers); i++ {
+		for j := i + 1; j < len(peers); j++ {
+			err := peers[i].AddPeer(peers[j])
+			if err != nil {
+				t.Error(err)
+			}
+		}
+	}
+
+	time.Sleep(time.Second * 10)
+
+	for i := 0; i < len(peers); i++ {
+		for j := i + 1; j < len(peers); j++ {
+			if !reflect.DeepEqual(peers[i].blocks, peers[j].blocks) {
+				t.Log("nodes block not equal")
+			}
+		}
+	}
+
 }
