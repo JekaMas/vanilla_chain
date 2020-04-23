@@ -1,6 +1,9 @@
+// +build !race
+
 package vanilla_chain
 
 import (
+	"context"
 	"crypto"
 	"crypto/ed25519"
 	"reflect"
@@ -40,7 +43,7 @@ func TestSendTransactionSuccess(t *testing.T) {
 
 	var err error
 	for i := 0; i < numOfPeers; i++ {
-		peers[i], err = NewNode(keys[i], genesis)
+		peers[i], err = NewNode(keys[i], genesis, Miner)
 		if err != nil {
 			t.Error(err)
 		}
@@ -147,13 +150,17 @@ func TestNode_Sync(t *testing.T) {
 	genesisBlock := genesis.ToBlock()
 	var err error
 	for i := 0; i < numOfPeers; i++ {
-		peers[i], err = NewNode(keys[i], genesis)
+		peers[i], err = NewNode(keys[i], genesis, Miner)
 		if err != nil {
 			t.Error(err)
 		}
-		peers[i].AddBlock(genesisBlock)
+		err := peers[i].AddBlock(genesisBlock)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	err = peers[3].AddBlock(*NewBlock(1, nil, peers[2].GetBlockByNumber(0).BlockHash))
+	err = peers[0].AddBlock(*NewBlock(1, nil, peers[2].GetBlockByNumber(0).BlockHash))
+
 	if err != nil {
 		t.Error(err)
 	}
@@ -166,14 +173,54 @@ func TestNode_Sync(t *testing.T) {
 		}
 	}
 
-	time.Sleep(time.Second * 10)
+	time.Sleep(time.Second * 5)
+	if !checkEqualsBlocks(peers) {
+		t.Fatal("blocks not equal")
+	}
+}
 
+func checkEqualsBlocks(peers []*Node) bool {
 	for i := 0; i < len(peers); i++ {
 		for j := i + 1; j < len(peers); j++ {
 			if !reflect.DeepEqual(peers[i].blocks, peers[j].blocks) {
-				t.Log("nodes block not equal")
+				return false
 			}
 		}
 	}
+	return true
+}
 
+func TestMinig(t *testing.T) {
+	genesis := Genesis{
+		Alloc: make(map[string]uint64),
+	}
+	pKey, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis.Validators = append(genesis.Validators, key.Public())
+
+	peer, err := NewNode(key, genesis, Miner)
+	peer.state[peer.address] = 10_000
+	peer.validators = append(peer.validators, pKey)
+
+	transaction := NewTransaction(peer.address, peer.address, 1000, 10, pKey, nil)
+	*transaction, err = peer.SignTransaction(*transaction)
+
+	hash, err := transaction.Hash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer.AddBlock(genesis.ToBlock())
+	peer.transactionPool[hash] = *transaction
+	ctx := context.Background()
+
+	lastLenBefore := len(peer.blocks)
+	lastBlockBefore := peer.lastBlockNum
+	go peer.miningLoop(ctx)
+
+	time.Sleep(time.Millisecond * 50)
+	if peer.lastBlockNum == lastBlockBefore && len(peer.blocks) == lastLenBefore {
+		t.Fatal("blocks not update")
+	}
 }
