@@ -6,6 +6,7 @@ var (
 	ErrPrevHashEmpty = errors.New("prev hash is empty")
 
 	ErrBlockAlreadyExist = errors.New("block already exist")
+	ErrBlocksNotEqual    = errors.New("blocks not equal")
 )
 
 //Transaction
@@ -15,4 +16,7 @@ var (
 	ErrTransAmountNotValid  = errors.New("field 'amount' not valid value")
 	ErrTransNotHasSignature = errors.New("not has signature")
 	ErrTransNotHasNeedSum   = errors.New("not has need sum")
+
+	ErrTransAlreadyExist = errors.New("transaction already exist")
+	ErrTransNotEqual     = errors.New("transaction not equal")
 )

@@ -154,12 +154,13 @@ func TestNode_Sync(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		err := peers[i].AddBlock(genesisBlock)
+		err := peers[i].AddBlock(genesisBlock, "")
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	err = peers[0].AddBlock(*NewBlock(1, nil, peers[2].GetBlockByNumber(0).BlockHash))
+
+	err = peers[0].AddBlock(*NewBlock(1, nil, peers[2].GetBlockByNumber(0).BlockHash), "")
 
 	if err != nil {
 		t.Error(err)
@@ -211,7 +212,7 @@ func TestMinig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	peer.AddBlock(genesis.ToBlock())
+	peer.blocks = append(peer.blocks, genesis.ToBlock())
 	peer.transactionPool[hash] = *transaction
 	ctx := context.Background()
 

@@ -35,7 +35,7 @@ type Node struct {
 	peers map[string]connectedPeer
 	//hash(state) - хеш от упорядоченного слайса ключ-значение
 	//todo hash()
-	state      map[string]uint64 // балансы
+	state      State // map[string]uint64 // балансы
 	validators []ed25519.PublicKey
 
 	//transaction hash - > transaction
@@ -108,8 +108,8 @@ func (c *Node) miningLoop(ctx context.Context) {
 		}
 
 		transactions := make([]Transaction, 0, MaxTransactionBlock)
-		transactionsDel := make([]Transaction, 0, MaxTransactionBlock)
-		for key, transaction := range c.transactionPool {
+
+		for _, transaction := range c.transactionPool {
 			if len(transactions) == MaxTransactionBlock {
 				break
 			}
@@ -118,23 +118,14 @@ func (c *Node) miningLoop(ctx context.Context) {
 			if err == nil {
 				transactions = append(transactions, transaction)
 			}
-
-			transactionsDel = append(transactionsDel, transaction)
-			delete(c.transactionPool, key)
-		}
-		c.Broadcast(ctx, Message{
-			From: c.address,
-			Data: DelTransResp{
-				NodeName:     c.address,
-				Transactions: transactionsDel,
-			},
-		})
-
-		if len(transactions) == 0 {
-			continue
 		}
 
 		block := NewBlock(uint64(c.lastBlockNum+1), transactions, c.blocks[c.lastBlockNum].PrevBlockHash)
+		var err error
+		block.StateHash, err = c.state.StateHash()
+		if err != nil {
+			continue
+		}
 		c.blocks = append(c.blocks, *block)
 		c.lastBlockNum++
 		c.Broadcast(ctx, Message{
@@ -169,47 +160,25 @@ func (c *Node) peerLoop(ctx context.Context, peer connectedPeer) {
 }
 
 func (c *Node) processMessage(ctx context.Context, address string, msg Message) error {
+	var err error
 	switch m := msg.Data.(type) {
 	case NodeInfoResp:
+		err = c.nodeInfoResp(m, address, ctx)
+
 		//fmt.Println(c.lastBlockNum, "(", c.address , ")", " and ", m.BlockNum)
-		if c.lastBlockNum < m.BlockNum && !c.handshake {
-			c.handshake = true
-			c.peers[address].Send(ctx, Message{
-				From: c.address,
-				Data: BlockByNumResp{
-					NodeName: c.address,
-					BlockNum: c.lastBlockNum + 1,
-				},
-			})
-		}
+
 	case BlockByNumResp:
-		if !reflect.DeepEqual(m.Block, Block{}) {
-			err := c.AddBlock(m.Block)
-			if err != nil {
-				return err
-			}
-			if c.lastBlockNum < m.LastBlockNum {
-				c.peers[address].Send(ctx, Message{
-					From: c.address,
-					Data: BlockByNumResp{
-						NodeName: c.address,
-						BlockNum: c.lastBlockNum + 1,
-					},
-				})
-			} else {
-				c.handshake = false
-			}
-		} else {
-			c.peers[address].Send(ctx, Message{
-				From: c.address,
-				Data: BlockByNumResp{
-					NodeName:     c.address,
-					BlockNum:     m.BlockNum,
-					LastBlockNum: c.lastBlockNum,
-					Block:        c.GetBlockByNumber(m.BlockNum),
-				},
-			})
+		err = c.blockByNumResp(m, address, ctx)
+		if err != nil {
+			return err
 		}
+	case AddBlockResp:
+		err = c.addBlockResp(m, address, ctx)
+	case AddTransactionResp:
+		err = c.addTransctionResp(m, address, ctx)
+	}
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -232,16 +201,33 @@ func (c *Node) GetBalance(account string) (uint64, error) {
 }
 
 func (c *Node) AddTransaction(transaction Transaction) error {
-	err := c.checkTransaction(transaction)
-	if err != nil {
-		return err
-	}
-
 	hash, err := transaction.Hash()
 	if err != nil {
 		return err
 	}
+
+	if !reflect.DeepEqual(c.transactionPool[hash], Transaction{}) {
+		if reflect.DeepEqual(c.transactionPool[hash], transaction) {
+			return nil
+		}
+		return ErrTransNotEqual
+	}
+
+	err = c.checkTransaction(transaction)
+	if err != nil {
+		return err
+	}
+
 	c.transactionPool[hash] = transaction
+	ctx := context.Background()
+
+	c.Broadcast(ctx, Message{
+		From: c.address,
+		Data: AddTransactionResp{
+			NodeName:    c.address,
+			Transaction: Transaction{},
+		},
+	})
 	return nil
 }
 
@@ -273,42 +259,30 @@ func (c *Node) SignTransaction(transaction Transaction) (Transaction, error) {
 	return transaction, nil
 }
 
-//func (c *Chain) ExecuteBlock(block *Block) error {
-//	return nil
-//}
-//
-//func (c *Chain) addBlock(block *Block) {
-//	c.blocks = append(c.blocks, *block)
-//}
-//
-//func (c *Chain) Consensus() {
-//	for _, peer := range c.peers {
-//		peer.SendBlock()
-//	}
-//}
-
-func (c *Node) AddBlock(block Block) error {
+func (c *Node) AddBlock(block Block, validator string) error {
 	c.blockMut.Lock()
 	defer c.blockMut.Unlock()
 	blockCheck := c.GetBlockByNumber(block.BlockNum)
 
 	if !reflect.DeepEqual(blockCheck, Block{}) {
-		return ErrBlockAlreadyExist
-	}
-	if len(c.blocks) == 2 {
-		x := 2
-		x = x
+		if reflect.DeepEqual(block, blockCheck) {
+			return ErrBlockAlreadyExist
+		}
+		return ErrBlocksNotEqual
 	}
 	for _, transaction := range block.Transactions {
 		err := c.checkTransaction(transaction)
 		if err != nil {
 			//skip
+			continue
 		}
+		//state.executeTransaction(transaction, block.)
+		c.state.executeTransaction(transaction, validator)
 
 	}
 
 	c.blocks = append(c.blocks, block)
-	c.lastBlockNum = uint64(len(c.blocks)) - 1
+	c.lastBlockNum += 1
 
 	return nil
 }
