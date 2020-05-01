@@ -1,6 +1,7 @@
 package vanilla_chain
 
 import (
+	"crypto/ed25519"
 	"errors"
 	"time"
 )
@@ -24,13 +25,34 @@ func NewBlock(num uint64, transactions []Transaction, previousHash string) *Bloc
 	}
 }
 
-func (bl *Block) Hash() (string, error) {
-	if bl == nil {
+func (block *Block) Hash() (string, error) {
+	if block == nil {
 		return "", errors.New("empty block")
 	}
-	b, err := Bytes(bl)
+	b, err := Bytes(block)
 	if err != nil {
 		return "", err
 	}
 	return Hash(b)
+}
+
+func (block *Block) Sign(key ed25519.PrivateKey) error {
+	message, err := Bytes(block.BlockHash)
+	if err != nil {
+		return err
+	}
+	block.Signature = ed25519.Sign(key, message)
+	return nil
+}
+
+func (block *Block) Verify(validator ed25519.PublicKey) error {
+	message, err := Bytes(block.BlockHash)
+	if err != nil {
+		return err
+	}
+	verify := ed25519.Verify(validator, message, block.Signature)
+	if !verify {
+		return ErrVerifyNotPassed
+	}
+	return nil
 }

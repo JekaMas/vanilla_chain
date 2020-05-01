@@ -126,6 +126,15 @@ func (c *Node) miningLoop(ctx context.Context) {
 		if err != nil {
 			continue
 		}
+
+		block.BlockHash, err = block.Hash()
+		if err != nil {
+			continue
+		}
+		err = block.Sign(c.key)
+		if err != nil {
+			continue
+		}
 		c.blocks = append(c.blocks, *block)
 		c.lastBlockNum++
 		c.Broadcast(ctx, Message{
@@ -164,9 +173,6 @@ func (c *Node) processMessage(ctx context.Context, address string, msg Message) 
 	switch m := msg.Data.(type) {
 	case NodeInfoResp:
 		err = c.nodeInfoResp(m, address, ctx)
-
-		//fmt.Println(c.lastBlockNum, "(", c.address , ")", " and ", m.BlockNum)
-
 	case BlockByNumResp:
 		err = c.blockByNumResp(m, address, ctx)
 		if err != nil {
@@ -270,6 +276,12 @@ func (c *Node) AddBlock(block Block, validator string) error {
 		}
 		return ErrBlocksNotEqual
 	}
+
+	err := block.Verify(c.validators[int(c.lastBlockNum)%len(c.validators)])
+	if err != nil {
+		return err
+	}
+
 	for _, transaction := range block.Transactions {
 		err := c.checkTransaction(transaction)
 		if err != nil {

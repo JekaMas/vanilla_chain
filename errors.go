@@ -4,9 +4,14 @@ import "errors"
 
 var (
 	ErrPrevHashEmpty = errors.New("prev hash is empty")
+)
 
+//Block
+var (
 	ErrBlockAlreadyExist = errors.New("block already exist")
 	ErrBlocksNotEqual    = errors.New("blocks not equal")
+
+	ErrVerifyNotPassed = errors.New("verify not passed")
 )
 
 //Transaction
