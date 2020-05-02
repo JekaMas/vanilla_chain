@@ -114,7 +114,7 @@ func (c *Node) miningLoop(ctx context.Context) {
 				break
 			}
 
-			err := c.checkTransaction(transaction)
+			err := c.checkTransaction(transaction, transaction.PubKey)
 			if err == nil {
 				transactions = append(transactions, transaction)
 			}
@@ -219,7 +219,7 @@ func (c *Node) AddTransaction(transaction Transaction) error {
 		return ErrTransNotEqual
 	}
 
-	err = c.checkTransaction(transaction)
+	err = c.checkTransaction(transaction, transaction.PubKey)
 	if err != nil {
 		return err
 	}
@@ -283,7 +283,7 @@ func (c *Node) AddBlock(block Block, validator string) error {
 	}
 
 	for _, transaction := range block.Transactions {
-		err := c.checkTransaction(transaction)
+		err := c.checkTransaction(transaction, transaction.PubKey)
 		if err != nil {
 			//skip
 			continue
@@ -299,7 +299,7 @@ func (c *Node) AddBlock(block Block, validator string) error {
 	return nil
 }
 
-func (c *Node) checkTransaction(transaction Transaction) error {
+func (c *Node) checkTransaction(transaction Transaction, key ed25519.PublicKey) error {
 	if transaction.To == "" {
 		return ErrTransToEmpty
 	}
@@ -311,6 +311,13 @@ func (c *Node) checkTransaction(transaction Transaction) error {
 	}
 	if transaction.Signature == nil {
 		return ErrTransNotHasSignature
+	}
+	if key == nil {
+		return ErrNotHasPublicKey
+	}
+
+	if err := transaction.Verify(key); err != nil {
+		return err
 	}
 	balance, ok := c.state[transaction.From]
 	if !ok {

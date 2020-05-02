@@ -3,7 +3,8 @@ package vanilla_chain
 import "errors"
 
 var (
-	ErrPrevHashEmpty = errors.New("prev hash is empty")
+	ErrPrevHashEmpty   = errors.New("prev hash is empty")
+	ErrNotHasPublicKey = errors.New("not specified public key")
 )
 
 //Block
