@@ -132,13 +132,18 @@ func TestNode_CheckTransaction(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			node := &Node{
-				state: map[string]uint64{
-					"a": 1000,
-					"b": 500,
-					"c": 10000,
-					"d": 5000,
-				},
+				//state: State{state:State{
+				//	"a": 1000,
+				//	"b": 500,
+				//	"c": 10000,
+				//	"d": 5000,
+				//	},
+				//},
 			}
+			node.state.state.Store("a", uint64(1000))
+			node.state.state.Store("b", uint64(500))
+			node.state.state.Store("c", uint64(10000))
+			node.state.state.Store("d", uint64(5000))
 			if test.trans.Signature == nil {
 				err := test.trans.Sign(validatorPrivateKey)
 				if err != nil {
@@ -150,7 +155,7 @@ func TestNode_CheckTransaction(t *testing.T) {
 			} else {
 				test.trans.Signature = nil
 			}
-			err = node.checkTransaction(test.trans, test.trans.PubKey)
+			err = node.checkTransaction(test.trans)
 			if !reflect.DeepEqual(err, test.res) {
 				t.Fatal(err, " != ", test.res)
 			}

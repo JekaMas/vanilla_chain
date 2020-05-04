@@ -23,9 +23,11 @@ type Genesis struct {
 func (g Genesis) ToBlock() Block {
 	transactions := make([]Transaction, len(g.Alloc))
 
+	var state State
 	i := 0
 	for address, amount := range g.Alloc {
 		transactions[i] = *NewTransaction("", address, amount, 0, nil, nil)
+		state.Add(address, amount)
 		i++
 	}
 	sort.Slice(transactions, func(i, j int) bool {
@@ -36,7 +38,10 @@ func (g Genesis) ToBlock() Block {
 		return Block{}
 	}
 	block := NewBlock(0, transactions, prevHash)
-
+	block.StateHash, err = state.StateHash()
+	if err != nil {
+		return Block{}
+	}
 	block.BlockHash, err = block.Hash()
 	if err != nil {
 		return Block{}

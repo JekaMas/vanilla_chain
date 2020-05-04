@@ -3,12 +3,14 @@ package vanilla_chain
 import "crypto"
 
 type Blockchain interface {
+	Initialize()
 	NodeKey() crypto.PublicKey
+	NodeGetType() NodeType
 	NodeAddress() string
 	Connection(address string, in chan Message) chan Message
 
 	PublicAPI
-	AddBlock(block Block, validator string) error
+	AddBlock(block Block) error
 }
 
 type PublicAPI interface {

@@ -2,6 +2,7 @@ package vanilla_chain
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 )
 
@@ -37,8 +38,11 @@ type DelTransResp struct {
 }
 
 func (c *Node) nodeInfoResp(m NodeInfoResp, address string, ctx context.Context) error {
+	c.blockMut.Lock()
+	defer c.blockMut.Unlock()
 	if c.lastBlockNum < m.BlockNum && !c.handshake {
 		c.handshake = true
+		c.peerMut.Lock()
 		c.peers[address].Send(ctx, Message{
 			From: c.address,
 			Data: BlockByNumResp{
@@ -46,16 +50,20 @@ func (c *Node) nodeInfoResp(m NodeInfoResp, address string, ctx context.Context)
 				BlockNum: c.lastBlockNum + 1,
 			},
 		})
+		c.peerMut.Unlock()
 	}
 	return nil
 }
 func (c *Node) blockByNumResp(m BlockByNumResp, address string, ctx context.Context) error {
 	if !reflect.DeepEqual(m.Block, Block{}) {
-		err := c.AddBlock(m.Block, address)
+		err := c.AddBlock(m.Block)
 		if err != nil {
 			return err
 		}
+		c.blockMut.Lock()
+		defer c.blockMut.Unlock()
 		if c.lastBlockNum < m.LastBlockNum {
+			c.peerMut.Lock()
 			c.peers[address].Send(ctx, Message{
 				From: c.address,
 				Data: BlockByNumResp{
@@ -63,10 +71,12 @@ func (c *Node) blockByNumResp(m BlockByNumResp, address string, ctx context.Cont
 					BlockNum: c.lastBlockNum + 1,
 				},
 			})
+			c.peerMut.Unlock()
 		} else {
 			c.handshake = false
 		}
 	} else {
+		c.peerMut.Lock()
 		c.peers[address].Send(ctx, Message{
 			From: c.address,
 			Data: BlockByNumResp{
@@ -76,12 +86,15 @@ func (c *Node) blockByNumResp(m BlockByNumResp, address string, ctx context.Cont
 				Block:        c.GetBlockByNumber(m.BlockNum),
 			},
 		})
+		c.peerMut.Unlock()
 	}
 	return nil
 }
 
 func (c *Node) addBlockResp(m AddBlockResp, address string, ctx context.Context) error {
-	err := c.AddBlock(m.Block, m.NodeName)
+
+	err := c.AddBlock(m.Block)
+	fmt.Println(err)
 	if err != nil {
 		if err == ErrBlockAlreadyExist {
 			return nil

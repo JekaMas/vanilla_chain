@@ -1,5 +1,3 @@
-// +build !race
-
 package vanilla_chain
 
 import (
@@ -43,10 +41,11 @@ func TestSendTransactionSuccess(t *testing.T) {
 
 	var err error
 	for i := 0; i < numOfPeers; i++ {
-		peers[i], err = NewNode(keys[i], genesis, Miner)
+		peers[i], err = NewNode(keys[i], genesis, Validator)
 		if err != nil {
 			t.Error(err)
 		}
+		peers[i].Initialize()
 	}
 
 	for i := 0; i < len(peers); i++ {
@@ -55,6 +54,9 @@ func TestSendTransactionSuccess(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
+		}
+		if peers[i].NodeGetType() == Validator {
+
 		}
 	}
 
@@ -70,8 +72,10 @@ func TestSendTransactionSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// test
+	err = tr.Verify(tr.PubKey)
 
-	err = peers[0].AddTransaction(tr)
+	err = peers[3].AddTransaction(tr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +135,8 @@ func TestNode_Sync(t *testing.T) {
 	peers := make([]*Node, numOfPeers)
 
 	genesis := Genesis{
-		Alloc: make(map[string]uint64),
+		Alloc:      make(map[string]uint64),
+		Validators: make([]crypto.PublicKey, 0, numOfPeers),
 	}
 	keys := make([]ed25519.PrivateKey, numOfPeers)
 	for i := range keys {
@@ -146,21 +151,22 @@ func TestNode_Sync(t *testing.T) {
 			t.Error(err)
 		}
 		genesis.Alloc[address] = 100
+		genesis.Validators = append(genesis.Validators, key.Public())
 	}
-	genesisBlock := genesis.ToBlock()
 	var err error
 	for i := 0; i < numOfPeers; i++ {
-		peers[i], err = NewNode(keys[i], genesis, Miner)
+		peers[i], err = NewNode(keys[i], genesis, Validator)
 		if err != nil {
 			t.Error(err)
 		}
-		err := peers[i].AddBlock(genesisBlock, "")
-		if err != nil {
-			t.Fatal(err)
-		}
+		peers[i].Initialize()
 	}
-
-	err = peers[0].AddBlock(*NewBlock(1, nil, peers[2].GetBlockByNumber(0).BlockHash), "")
+	block := NewBlock(1, nil, peers[2].GetBlockByNumber(0).BlockHash)
+	err = block.Sign(peers[0].key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peers[0].addBlock(*block)
 
 	if err != nil {
 		t.Error(err)
@@ -199,10 +205,11 @@ func TestMinig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	genesis.Validators = append(genesis.Validators, key.Public())
+	genesis.Validators = append(genesis.Validators, pKey)
 
-	peer, err := NewNode(key, genesis, Miner)
-	peer.state[peer.address] = 10_000
+	peer, err := NewNode(key, genesis, Validator)
+	peer.state.state.Store(peer.address, uint64(10_000))
+	//peer.state.state[peer.address] = 10_000
 	peer.validators = append(peer.validators, pKey)
 
 	transaction := NewTransaction(peer.address, peer.address, 1000, 10, pKey, nil)
