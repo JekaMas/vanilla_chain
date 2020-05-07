@@ -25,8 +25,8 @@ func TestNode_CheckTransaction(t *testing.T) {
 			trans: Transaction{
 				From:      "a",
 				To:        "b",
-				Amount:    500,
-				Fee:       10,
+				Amount:    uint64(500),
+				Fee:       uint64(10),
 				PubKey:    validatorPublicKey,
 				Signature: nil,
 			},
@@ -37,8 +37,8 @@ func TestNode_CheckTransaction(t *testing.T) {
 			trans: Transaction{
 				From:      "a",
 				To:        "",
-				Amount:    500,
-				Fee:       10,
+				Amount:    uint64(500),
+				Fee:       uint64(10),
 				PubKey:    validatorPublicKey,
 				Signature: nil,
 			},
@@ -49,8 +49,8 @@ func TestNode_CheckTransaction(t *testing.T) {
 			trans: Transaction{
 				From:      "",
 				To:        "b",
-				Amount:    500,
-				Fee:       10,
+				Amount:    uint64(500),
+				Fee:       uint64(10),
 				PubKey:    validatorPublicKey,
 				Signature: nil,
 			},
@@ -140,10 +140,10 @@ func TestNode_CheckTransaction(t *testing.T) {
 				//	},
 				//},
 			}
-			node.state.state.Store("a", uint64(1000))
-			node.state.state.Store("b", uint64(500))
-			node.state.state.Store("c", uint64(10000))
-			node.state.state.Store("d", uint64(5000))
+			node.state.Store("a", uint64(1000))
+			node.state.Store("b", uint64(500))
+			node.state.Store("c", uint64(10000))
+			node.state.Store("d", uint64(5000))
 			if test.trans.Signature == nil {
 				err := test.trans.Sign(validatorPrivateKey)
 				if err != nil {

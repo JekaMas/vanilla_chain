@@ -41,7 +41,12 @@ func TestSendTransactionSuccess(t *testing.T) {
 
 	var err error
 	for i := 0; i < numOfPeers; i++ {
-		peers[i], err = NewNode(keys[i], genesis, Validator)
+		if i < 3 {
+			peers[i], err = NewNode(keys[i], genesis, Validator)
+		} else {
+			peers[i], err = NewNode(keys[i], genesis, User)
+
+		}
 		if err != nil {
 			t.Error(err)
 		}
@@ -55,9 +60,7 @@ func TestSendTransactionSuccess(t *testing.T) {
 				t.Error(err)
 			}
 		}
-		if peers[i].NodeGetType() == Validator {
 
-		}
 	}
 
 	tr := Transaction{
@@ -110,25 +113,25 @@ func TestSendTransactionSuccess(t *testing.T) {
 			t.Error(err)
 		}
 
-		if balance > initialBalance {
+		if balance < initialBalance {
 			t.Error("Incorrect validator balance")
 		}
 	}
 }
 
-func TestHased(t *testing.T) {
-	block := Block{
-		BlockNum:      0,
-		Timestamp:     11,
-		Transactions:  nil,
-		BlockHash:     "",
-		PrevBlockHash: "00000",
-		StateHash:     "",
-		Signature:     nil,
-	}
-
-	t.Log(block.Hash())
-}
+//func TestHased(t *testing.T) {
+//	block := Block{
+//		BlockNum:      0,
+//		Timestamp:     11,
+//		Transactions:  nil,
+//		BlockHash:     "",
+//		PrevBlockHash: "00000",
+//		StateHash:     "",
+//		Signature:     nil,
+//	}
+//
+//	//t.Log(block.Hash())
+//}
 
 func TestNode_Sync(t *testing.T) {
 	numOfPeers := 5
@@ -166,8 +169,9 @@ func TestNode_Sync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	peers[0].blockMut.Lock()
 	peers[0].addBlock(*block)
-
+	peers[0].blockMut.Unlock()
 	if err != nil {
 		t.Error(err)
 	}
@@ -189,9 +193,15 @@ func TestNode_Sync(t *testing.T) {
 func checkEqualsBlocks(peers []*Node) bool {
 	for i := 0; i < len(peers); i++ {
 		for j := i + 1; j < len(peers); j++ {
+			peers[i].blockMut.Lock()
+			peers[j].blockMut.Lock()
 			if !reflect.DeepEqual(peers[i].blocks, peers[j].blocks) {
+				peers[i].blockMut.Unlock()
+				peers[j].blockMut.Unlock()
 				return false
 			}
+			peers[i].blockMut.Unlock()
+			peers[j].blockMut.Unlock()
 		}
 	}
 	return true
@@ -208,7 +218,7 @@ func TestMinig(t *testing.T) {
 	genesis.Validators = append(genesis.Validators, pKey)
 
 	peer, err := NewNode(key, genesis, Validator)
-	peer.state.state.Store(peer.address, uint64(10_000))
+	peer.state.Store(peer.address, uint64(10_000))
 	//peer.state.state[peer.address] = 10_000
 	peer.validators = append(peer.validators, pKey)
 
@@ -228,7 +238,9 @@ func TestMinig(t *testing.T) {
 	go peer.miningLoop(ctx)
 
 	time.Sleep(time.Millisecond * 50)
+	peer.blockMut.Lock()
 	if peer.lastBlockNum == lastBlockBefore && len(peer.blocks) == lastLenBefore {
 		t.Fatal("blocks not update")
 	}
+	peer.blockMut.Unlock()
 }

@@ -2,16 +2,61 @@ package vanilla_chain
 
 import (
 	"context"
+	"sync"
 )
+
+type Peers struct {
+	peers map[string]connectedPeer
+	sync.RWMutex
+}
+
+func (peers *Peers) Delete(key string) error {
+	peer, ok := peers.Get(key)
+	if !ok {
+		return ErrPeerNotFound
+	}
+	peer.Cancel()
+	delete(peers.peers, key)
+	return nil
+}
+func (peers *Peers) Get(key string) (connectedPeer, bool) {
+	peers.RLock()
+	defer peers.RUnlock()
+	peer, ok := peers.peers[key]
+	return peer, ok
+}
+func (peers *Peers) Set(address string, out chan Message, in chan Message, ctx context.Context, cancel context.CancelFunc) {
+	peers.Lock()
+	defer peers.Unlock()
+
+	peers.peers[address] = connectedPeer{
+		Address: address,
+		Out:     out,
+		In:      in,
+		ctx:     ctx,
+		cancel:  cancel,
+	}
+}
+
+func (peers *Peers) Broadcast(msg Message) {
+	peers.RLock()
+	defer peers.RUnlock()
+	for _, v := range peers.peers {
+		if v.Address != msg.From {
+			v.Send(msg)
+		}
+	}
+}
 
 type connectedPeer struct {
 	Address string
 	In      chan Message
 	Out     chan Message
-	cancel  context.CancelFunc
+	ctx     context.Context
+	Cancel  context.CancelFunc
 }
 
-func (cp connectedPeer) Send(ctx context.Context, m Message) {
+func (cp connectedPeer) Send(m Message) {
 	//todo timeout using context + done check
 	cp.Out <- m
 }

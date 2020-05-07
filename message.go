@@ -2,7 +2,6 @@ package vanilla_chain
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 )
 
@@ -43,7 +42,7 @@ func (c *Node) nodeInfoResp(m NodeInfoResp, address string, ctx context.Context)
 	if c.lastBlockNum < m.BlockNum && !c.handshake {
 		c.handshake = true
 		c.peerMut.Lock()
-		c.peers[address].Send(ctx, Message{
+		c.peers[address].Send(Message{
 			From: c.address,
 			Data: BlockByNumResp{
 				NodeName: c.address,
@@ -64,7 +63,7 @@ func (c *Node) blockByNumResp(m BlockByNumResp, address string, ctx context.Cont
 		defer c.blockMut.Unlock()
 		if c.lastBlockNum < m.LastBlockNum {
 			c.peerMut.Lock()
-			c.peers[address].Send(ctx, Message{
+			c.peers[address].Send(Message{
 				From: c.address,
 				Data: BlockByNumResp{
 					NodeName: c.address,
@@ -77,7 +76,7 @@ func (c *Node) blockByNumResp(m BlockByNumResp, address string, ctx context.Cont
 		}
 	} else {
 		c.peerMut.Lock()
-		c.peers[address].Send(ctx, Message{
+		c.peers[address].Send(Message{
 			From: c.address,
 			Data: BlockByNumResp{
 				NodeName:     c.address,
@@ -92,9 +91,7 @@ func (c *Node) blockByNumResp(m BlockByNumResp, address string, ctx context.Cont
 }
 
 func (c *Node) addBlockResp(m AddBlockResp, address string, ctx context.Context) error {
-
 	err := c.AddBlock(m.Block)
-	fmt.Println(err)
 	if err != nil {
 		if err == ErrBlockAlreadyExist {
 			return nil

@@ -5,6 +5,7 @@ import "errors"
 var (
 	ErrPrevHashEmpty   = errors.New("prev hash is empty")
 	ErrNotHasPublicKey = errors.New("not specified public key")
+	ErrTimeDried       = errors.New("time dried")
 )
 
 //Block
@@ -25,4 +26,9 @@ var (
 
 	ErrTransAlreadyExist = errors.New("transaction already exist")
 	ErrTransNotEqual     = errors.New("transaction not equal")
+)
+
+// Peers
+var (
+	ErrPeerNotFound = errors.New("peer not found")
 )

@@ -15,6 +15,7 @@ const MaxTransactionBlock = 10
 const (
 	User = iota
 	Validator
+	LightClient
 )
 
 type NodeType byte
@@ -71,7 +72,10 @@ func (c *Node) Initialize() {
 	for _, validator := range c.genesis.Validators {
 		c.validators = append(c.validators, validator.(ed25519.PublicKey))
 	}
-	go c.miningLoop(context.Background())
+
+	if c.nodeType == Validator {
+		go c.miningLoop(context.Background())
+	}
 }
 
 func (c *Node) NodeKey() crypto.PublicKey {
@@ -136,9 +140,17 @@ func (c *Node) miningLoop(ctx context.Context) {
 
 			err := c.checkTransaction(transaction)
 			c.state.executeTransaction(transaction, c.address)
-			if err == nil {
-				transactions = append(transactions, transaction)
+			if err != nil {
+				continue
 			}
+			transactions = append(transactions, transaction)
+
+			hash, err := transaction.Hash()
+			if err != nil {
+				continue
+			}
+
+			delete(c.transactionPool, hash)
 		}
 		c.transMut.Unlock()
 		block := NewBlock(uint64(c.lastBlockNum+1), transactions, c.blocks[c.lastBlockNum].PrevBlockHash)
@@ -161,6 +173,7 @@ func (c *Node) miningLoop(ctx context.Context) {
 		c.addBlock(*block)
 		c.blockMut.Unlock()
 
+		c.state.Add(c.address, 1000)
 		c.Broadcast(ctx, Message{
 			From: c.address,
 			Data: AddBlockResp{Block: *block},
@@ -169,7 +182,7 @@ func (c *Node) miningLoop(ctx context.Context) {
 }
 
 func (c *Node) peerLoop(ctx context.Context, peer connectedPeer) {
-	peer.Send(ctx, Message{
+	peer.Send(Message{
 		From: c.address,
 		Data: c.NodeInfo(),
 	})
@@ -193,45 +206,41 @@ func (c *Node) peerLoop(ctx context.Context, peer connectedPeer) {
 }
 
 func (c *Node) processMessage(ctx context.Context, address string, msg Message) error {
-	//var err error
-	//c.send++
-
-	//fmt.Println(reflect.TypeOf(msg.Data), ":", c.send)
+	var err error
 	switch m := msg.Data.(type) {
 	case NodeInfoResp:
-		c.nodeInfoResp(m, address, ctx)
+		err = c.nodeInfoResp(m, address, ctx)
 	case BlockByNumResp:
-		c.blockByNumResp(m, address, ctx)
+		err = c.blockByNumResp(m, address, ctx)
 	case AddBlockResp:
-		c.addBlockResp(m, address, ctx)
+		err = c.addBlockResp(m, address, ctx)
 	case AddTransactionResp:
-		c.addTransctionResp(m, address, ctx)
+		err = c.addTransctionResp(m, address, ctx)
 	}
-	//if err != nil {
-	//	return err
-	//}
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (c *Node) Broadcast(ctx context.Context, msg Message) {
-	//c.send++
-	//fmt.Println(c.address, ":", c.send)
 	c.peerMut.Lock()
 	defer c.peerMut.Unlock()
 	for _, v := range c.peers {
 		if v.Address != c.address && v.Address != msg.From {
-			v.Send(ctx, msg)
+			v.Send(msg)
 		}
 	}
 }
 
 func (c *Node) RemovePeer(peer Blockchain) error {
-	panic("implement me")
+	c.peers[peer.NodeAddress()].cancel()
+	delete(c.peers, peer.NodeAddress())
 	return nil
 }
 
 func (c *Node) GetBalance(account string) (uint64, error) {
-	balance, _ := c.state.state.LoadOrStore(account, 0)
+	balance, _ := c.state.LoadOrStore(account, uint64(0))
 	return balance.(uint64), nil
 }
 
@@ -328,9 +337,15 @@ func (c *Node) AddBlock(block Block) error {
 		//state.executeTransaction(transaction, block.)
 
 		c.state.executeTransaction(transaction, validatorAddress)
-
+		hash, err := transaction.Hash()
+		if err != nil {
+			continue
+		}
+		c.transMut.Lock()
+		delete(c.transactionPool, hash)
+		c.transMut.Unlock()
 	}
-
+	c.state.Add(validatorAddress, 1000)
 	c.addBlock(block)
 
 	return nil
@@ -346,9 +361,7 @@ func (c *Node) checkTransaction(transaction Transaction) error {
 		return ErrTransToEmpty
 	}
 	if transaction.From == "" {
-		if c.lastBlockNum != 0 {
-			return ErrTransFromEmpty
-		}
+		return ErrTransFromEmpty
 	}
 	if transaction.Amount <= 0 {
 		return ErrTransAmountNotValid

@@ -7,7 +7,7 @@ import (
 )
 
 type State struct {
-	state sync.Map
+	sync.Map
 }
 
 //mu sync.Mutex
@@ -17,11 +17,12 @@ type State struct {
 
 func (state *State) executeTransaction(transaction Transaction, validator string) {
 	if transaction.From != "" {
-		balance, ok := state.state.Load(transaction.From)
+		balance, ok := state.Load(transaction.From)
 		if !ok {
 			return
 		}
-		state.state.Store(transaction.From, balance.(uint64)-transaction.Amount+transaction.Fee)
+		amount := balance.(uint64) - (transaction.Amount + transaction.Fee)
+		state.Store(transaction.From, amount)
 	}
 
 	//balance, _ := state.state.Load(transaction.To)
@@ -45,8 +46,8 @@ func (state *State) StateHash() (string, error) {
 }
 
 func (state *State) Add(key string, value uint64) {
-	balance, ok := state.state.LoadOrStore(key, value)
+	balance, ok := state.LoadOrStore(key, value)
 	if ok {
-		state.state.Store(key, balance.(uint64)+value)
+		state.Store(key, balance.(uint64)+value)
 	}
 }
