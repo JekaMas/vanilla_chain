@@ -7,12 +7,11 @@ import (
 
 // first block with blockchain settings
 type Genesis struct {
-	//Account -> funds
-	Alloc map[string]uint64
-	//list of validators public keys
-	Validators []crypto.PublicKey
+	Alloc      map[string]uint64  // Account -> funds
+	Validators []crypto.PublicKey // list of validators public keys
 }
 
+// todo: не используешь, лучше сразу удаляй в отдельной ветке. будет нужно, то в ветке посмотришь.
 //func NewGenesis(allocs map[string]uint64, validators []ed25519.PublicKey) *Genesis {
 //	return &Genesis{
 //		Alloc:      allocs,
@@ -21,27 +20,31 @@ type Genesis struct {
 //}
 
 func (g Genesis) ToBlock() Block {
-	transactions := make([]Transaction, len(g.Alloc))
+	transactions := make([]Transaction, 0, len(g.Alloc))
 
 	var state State
-	i := 0
 	for address, amount := range g.Alloc {
-		transactions[i] = *NewTransaction("", address, amount, 0, nil, nil)
-		state.Add(address, amount)
-		i++
+		transactions = append(transactions,
+			*NewTransaction("0", address, amount, 0, nil, nil))
+		state.Set(address, amount)
 	}
+
 	sort.Slice(transactions, func(i, j int) bool {
 		return transactions[i].To < transactions[j].To
 	})
-	prevHash, err := Hash([]byte("0"))
+
+	prevHash, err := Hash([]byte("0")) // todo неясно, что это за хэш и почему он такой нужен. Может его выделить в константу?
 	if err != nil {
+		// todo тут и далее теряются ошибки
 		return Block{}
 	}
+
 	block := NewBlock(0, transactions, prevHash)
 	block.StateHash, err = state.StateHash()
 	if err != nil {
 		return Block{}
 	}
+
 	block.BlockHash, err = block.Hash()
 	if err != nil {
 		return Block{}

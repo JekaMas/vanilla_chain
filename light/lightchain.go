@@ -6,11 +6,11 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"log"
-	"vanilla_chain"
+	".."
 )
 
 type LightBlock struct {
-	BlockHash     string `json:"-"`
+	blockHash     string
 	PrevBlockHash string
 	StateHash     string
 }
@@ -119,7 +119,7 @@ func (n *LightNode) AddBlock(block vanilla_chain.Block) error {
 	return nil
 }
 
-func (n *LightNode) peerLoop(ctx context.Context, peer vanilla_chain.connectedPeer) {
+func (n *LightNode) peerLoop(ctx context.Context, peer vanilla_chain.ConnectedPeer) {
 	for {
 		select {
 		case <-ctx.Done():

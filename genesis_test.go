@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// todo добавь тестов: пустой Alloc, nil Alloc,
 func TestGenesis_ToBlock(t *testing.T) {
 	var tests = []struct {
 		name    string
@@ -22,14 +23,17 @@ func TestGenesis_ToBlock(t *testing.T) {
 			},
 			block: Block{Transactions: []Transaction{
 				{
+					From:   "0",
 					To:     "a",
 					Amount: 1,
 				},
 				{
+					From:   "0",
 					To:     "b",
 					Amount: 3,
 				},
 				{
+					From:   "0",
 					To:     "c",
 					Amount: 2,
 				},
@@ -40,6 +44,7 @@ func TestGenesis_ToBlock(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			block := test.genesis.ToBlock()
 			if !reflect.DeepEqual(block.Transactions, test.block.Transactions) {
+				// todo если попадаем в ошибку, то как нам отлаживать? Попробуй тут же печатать, что ожидали, а что получили.
 				t.Fatal("genesis not true")
 			}
 		})

@@ -75,12 +75,17 @@ func TestSendTransactionSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// test
 	err = tr.Verify(tr.PubKey)
+	// todo не проверял ошибку
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	err = peers[3].AddTransaction(tr)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("tx %v, err %v", tr, err)
 	}
 
 	//wait transaction processing

@@ -13,7 +13,7 @@ type Transaction struct {
 	Fee    uint64
 	PubKey ed25519.PublicKey
 
-	Signature []byte `json:"-"`
+	signature []byte // todo: если поле Signature не используется в других пакетах, то можно его сделать приватным и оно также не будет сериализироваться
 }
 
 func NewTransaction(from, to string, amount, fee uint64, key ed25519.PublicKey, signature []byte) *Transaction {
@@ -23,7 +23,7 @@ func NewTransaction(from, to string, amount, fee uint64, key ed25519.PublicKey, 
 		Amount:    amount,
 		Fee:       fee,
 		PubKey:    key,
-		Signature: signature,
+		signature: signature,
 	}
 }
 func (transaction Transaction) Hash() (string, error) {
@@ -53,7 +53,7 @@ func (transaction *Transaction) Sign(key ed25519.PrivateKey) error {
 	if err != nil {
 		return err
 	}
-	transaction.Signature = ed25519.Sign(key, message)
+	transaction.signature = ed25519.Sign(key, message)
 	return nil
 }
 
@@ -66,7 +66,7 @@ func (transaction *Transaction) Verify(validator ed25519.PublicKey) error {
 	if err != nil {
 		return err
 	}
-	verify := ed25519.Verify(validator, message, transaction.Signature)
+	verify := ed25519.Verify(validator, message, transaction.signature)
 	if !verify {
 		return ErrVerifyNotPassed
 	}

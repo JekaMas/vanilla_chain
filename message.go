@@ -36,9 +36,11 @@ type DelTransResp struct {
 	Transactions []Transaction
 }
 
+// todo ctx не используется. также его обычно делают первым параметром
 func (c *Node) nodeInfoResp(m NodeInfoResp, address string, ctx context.Context) error {
 	c.blockMut.Lock()
 	defer c.blockMut.Unlock()
+
 	if c.lastBlockNum < m.BlockNum && !c.handshake {
 		c.handshake = true
 		c.peerMut.Lock()

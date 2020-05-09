@@ -6,7 +6,7 @@ import (
 )
 
 type Peers struct {
-	peers map[string]connectedPeer
+	peers map[string]ConnectedPeer
 	sync.RWMutex
 }
 
@@ -19,7 +19,7 @@ func (peers *Peers) Delete(key string) error {
 	delete(peers.peers, key)
 	return nil
 }
-func (peers *Peers) Get(key string) (connectedPeer, bool) {
+func (peers *Peers) Get(key string) (ConnectedPeer, bool) {
 	peers.RLock()
 	defer peers.RUnlock()
 	peer, ok := peers.peers[key]
@@ -29,12 +29,12 @@ func (peers *Peers) Set(address string, out chan Message, in chan Message, ctx c
 	peers.Lock()
 	defer peers.Unlock()
 
-	peers.peers[address] = connectedPeer{
+	peers.peers[address] = ConnectedPeer{
 		Address: address,
 		Out:     out,
 		In:      in,
 		ctx:     ctx,
-		cancel:  cancel,
+		Cancel:  cancel,
 	}
 }
 
@@ -48,7 +48,7 @@ func (peers *Peers) Broadcast(msg Message) {
 	}
 }
 
-type connectedPeer struct {
+type ConnectedPeer struct {
 	Address string
 	In      chan Message
 	Out     chan Message
@@ -56,12 +56,12 @@ type connectedPeer struct {
 	Cancel  context.CancelFunc
 }
 
-func (cp connectedPeer) Send(m Message) {
+func (cp ConnectedPeer) Send(m Message) {
 	//todo timeout using context + done check
 	cp.Out <- m
 }
 
-//func (peer *connectedPeer) GetBlockById(idBlock uint64) Block {
+//func (peer *ConnectedPeer) GetBlockById(idBlock uint64) Block {
 //	for {
 //		select {
 //		case block := <-peer.channels.blockChannel:

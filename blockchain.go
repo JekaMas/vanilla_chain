@@ -5,8 +5,11 @@ import (
 	"crypto"
 	"crypto/ed25519"
 	"errors"
+	"fmt"
 	"log"
 	"reflect"
+	"sync"
+	"time"
 )
 
 const MSGBusLen = 1_000_000
@@ -34,7 +37,7 @@ type Node struct {
 	blockMut sync.Mutex
 	//peer address - > peer info
 	peerMut sync.Mutex
-	peers   map[string]connectedPeer
+	peers   map[string]ConnectedPeer
 	//hash(state) - хеш от упорядоченного слайса ключ-значение
 	state State // map[string]uint64 // балансы
 
@@ -56,7 +59,7 @@ func NewNode(key ed25519.PrivateKey, genesis Genesis, nodeType NodeType) (*Node,
 		genesis:         genesis,
 		blocks:          make([]Block, 0),
 		lastBlockNum:    0,
-		peers:           make(map[string]connectedPeer, 0),
+		peers:           make(map[string]ConnectedPeer, 0),
 		transactionPool: make(map[string]Transaction),
 		nodeType:        nodeType,
 	}, err
@@ -65,7 +68,11 @@ func NewNode(key ed25519.PrivateKey, genesis Genesis, nodeType NodeType) (*Node,
 func (c *Node) Initialize() {
 	block := c.genesis.ToBlock()
 	for _, transaction := range block.Transactions {
-		c.state.executeTransaction(transaction, "")
+		err := c.state.executeTransaction(transaction, "0")
+		// todo: не стоит игнорировать ошибки
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	c.blocks = append(c.blocks, block)
@@ -74,6 +81,7 @@ func (c *Node) Initialize() {
 	}
 
 	if c.nodeType == Validator {
+		// todo это лучше выделить в отдельный метод вроде StartMining
 		go c.miningLoop(context.Background())
 	}
 }
@@ -92,11 +100,11 @@ func (c *Node) Connection(address string, in chan Message, out chan Message) cha
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c.peerMut.Lock()
-	c.peers[address] = connectedPeer{
+	c.peers[address] = ConnectedPeer{
 		Address: address,
 		Out:     out,
 		In:      in,
-		cancel:  cancel,
+		Cancel:  cancel,
 	}
 	c.peerMut.Unlock()
 	go c.peerLoop(ctx, c.peers[address])
@@ -181,7 +189,7 @@ func (c *Node) miningLoop(ctx context.Context) {
 	}
 }
 
-func (c *Node) peerLoop(ctx context.Context, peer connectedPeer) {
+func (c *Node) peerLoop(ctx context.Context, peer ConnectedPeer) {
 	peer.Send(Message{
 		From: c.address,
 		Data: c.NodeInfo(),
@@ -233,12 +241,14 @@ func (c *Node) Broadcast(ctx context.Context, msg Message) {
 	}
 }
 
+// todo: тут не бывает ошибки
 func (c *Node) RemovePeer(peer Blockchain) error {
-	c.peers[peer.NodeAddress()].cancel()
+	c.peers[peer.NodeAddress()].Cancel()
 	delete(c.peers, peer.NodeAddress())
 	return nil
 }
 
+// todo: тут не бывает ошибки
 func (c *Node) GetBalance(account string) (uint64, error) {
 	balance, _ := c.state.LoadOrStore(account, uint64(0))
 	return balance.(uint64), nil
@@ -366,7 +376,7 @@ func (c *Node) checkTransaction(transaction Transaction) error {
 	if transaction.Amount <= 0 {
 		return ErrTransAmountNotValid
 	}
-	if transaction.Signature == nil {
+	if transaction.signature == nil {
 		return ErrTransNotHasSignature
 	}
 	if transaction.PubKey == nil {
@@ -377,10 +387,11 @@ func (c *Node) checkTransaction(transaction Transaction) error {
 	}
 	balance, err := c.GetBalance(transaction.From)
 	if err != nil {
-		return ErrTransNotHasNeedSum
+		// todo: ты теряешь тут и в подобных местах изначальное сообщение об ошибке
+		return fmt.Errorf("%w: %s", ErrTransNotHasNeedSum, err)
 	}
 	if balance < transaction.Amount+transaction.Fee {
-		return ErrTransNotHasNeedSum
+		return fmt.Errorf("%w: balance %d. amount+fee %d", ErrTransNotHasNeedSum, balance, transaction.Amount+transaction.Fee)
 	}
 
 	return nil
@@ -391,6 +402,7 @@ func (c *Node) checkValidatorTurn() bool {
 	defer c.blockMut.Unlock()
 	validatorAddr, err := PubKeyToAddress(c.validators[int(c.lastBlockNum)%len(c.validators)])
 	if err != nil {
+		// todo теряешь саму произошедшую ошибку. будет трудно отлаживать
 		return false
 	}
 	if validatorAddr != c.address {

@@ -2,7 +2,7 @@ package vanilla_chain
 
 import (
 	"crypto/ed25519"
-	"reflect"
+	"errors"
 	"testing"
 )
 
@@ -28,7 +28,7 @@ func TestNode_CheckTransaction(t *testing.T) {
 				Amount:    uint64(500),
 				Fee:       uint64(10),
 				PubKey:    validatorPublicKey,
-				Signature: nil,
+				signature: nil,
 			},
 			res: nil,
 		},
@@ -40,7 +40,7 @@ func TestNode_CheckTransaction(t *testing.T) {
 				Amount:    uint64(500),
 				Fee:       uint64(10),
 				PubKey:    validatorPublicKey,
-				Signature: nil,
+				signature: nil,
 			},
 			res: ErrTransToEmpty,
 		},
@@ -52,7 +52,7 @@ func TestNode_CheckTransaction(t *testing.T) {
 				Amount:    uint64(500),
 				Fee:       uint64(10),
 				PubKey:    validatorPublicKey,
-				Signature: nil,
+				signature: nil,
 			},
 			res: ErrTransFromEmpty,
 		},
@@ -64,7 +64,7 @@ func TestNode_CheckTransaction(t *testing.T) {
 				Amount:    0,
 				Fee:       10,
 				PubKey:    validatorPublicKey,
-				Signature: nil,
+				signature: nil,
 			},
 			res: ErrTransAmountNotValid,
 		},
@@ -76,7 +76,7 @@ func TestNode_CheckTransaction(t *testing.T) {
 				Amount:    500,
 				Fee:       10,
 				PubKey:    validatorPublicKey,
-				Signature: []byte{'a'},
+				signature: []byte{'a'},
 			},
 			res: ErrTransNotHasSignature,
 		},
@@ -88,7 +88,7 @@ func TestNode_CheckTransaction(t *testing.T) {
 				Amount:    500,
 				Fee:       10,
 				PubKey:    validatorPublicKey2,
-				Signature: nil,
+				signature: nil,
 			},
 			res: ErrVerifyNotPassed,
 		},
@@ -100,7 +100,7 @@ func TestNode_CheckTransaction(t *testing.T) {
 				Amount:    500,
 				Fee:       10,
 				PubKey:    nil,
-				Signature: nil,
+				signature: nil,
 			},
 			res: ErrNotHasPublicKey,
 		},
@@ -112,7 +112,7 @@ func TestNode_CheckTransaction(t *testing.T) {
 				Amount:    500,
 				Fee:       10,
 				PubKey:    validatorPublicKey,
-				Signature: nil,
+				signature: nil,
 			},
 			res: ErrTransNotHasNeedSum,
 		},
@@ -124,7 +124,7 @@ func TestNode_CheckTransaction(t *testing.T) {
 				Amount:    100_000,
 				Fee:       10,
 				PubKey:    validatorPublicKey,
-				Signature: nil,
+				signature: nil,
 			},
 			res: ErrTransNotHasNeedSum,
 		},
@@ -144,7 +144,7 @@ func TestNode_CheckTransaction(t *testing.T) {
 			node.state.Store("b", uint64(500))
 			node.state.Store("c", uint64(10000))
 			node.state.Store("d", uint64(5000))
-			if test.trans.Signature == nil {
+			if test.trans.signature == nil {
 				err := test.trans.Sign(validatorPrivateKey)
 				if err != nil {
 					if err != test.res {
@@ -153,11 +153,12 @@ func TestNode_CheckTransaction(t *testing.T) {
 					return
 				}
 			} else {
-				test.trans.Signature = nil
+				test.trans.signature = nil
 			}
+
 			err = node.checkTransaction(test.trans)
-			if !reflect.DeepEqual(err, test.res) {
-				t.Fatal(err, " != ", test.res)
+			if !errors.Is(err, test.res) {
+				t.Fatalf("an unexpected error.\nGot\t%v\nwanted\t%v\n", err, test.res)
 			}
 		})
 	}

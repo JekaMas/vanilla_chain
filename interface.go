@@ -7,7 +7,7 @@ type Blockchain interface {
 	NodeKey() crypto.PublicKey
 	NodeGetType() NodeType
 	NodeAddress() string
-	Connection(address string, in chan Message) chan Message
+	Connection(address string, in chan Message, out chan Message) chan Message
 
 	PublicAPI
 	AddBlock(block Block) error
